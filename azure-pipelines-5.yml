@@ -1,0 +1,72 @@
+# ASP.NET Core (.NET Framework)
+# Build and test ASP.NET Core projects targeting the full .NET Framework.
+# Add steps that publish symbols, save build artifacts, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/dotnet-core
+
+trigger:
+- main
+
+pool:
+  vmImage: 'windows-latest' # ✅ Use Microsoft-hosted agent like your working pipeline
+
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+
+steps:
+# ✅ Install NuGet tool
+- task: NuGetToolInstaller@1
+
+# ✅ Restore packages using NuGet
+- task: NuGetCommand@2
+  displayName: 'Restore NuGet packages'
+  inputs:
+    restoreSolution: '$(solution)'
+
+# ✅ Build the solution
+- task: VSBuild@1
+  displayName: 'Build solution'
+  inputs:
+    solution: '$(solution)'
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+
+# ✅ Run tests
+- task: VSTest@2
+  displayName: 'Run tests'
+  inputs:
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+
+# ✅ Authenticate for pushing to Azure Artifacts
+- task: NuGetAuthenticate@0
+  displayName: 'NuGet Authenticate'
+
+# ✅ Pack the NuGet package
+- task: NuGetCommand@2
+  displayName: 'Pack NuGet package'
+  inputs:
+    command: 'pack'
+    packagesToPack: '**/StringLibrary.csproj'
+    versioningScheme: 'off'
+    includeReferencedProjects: true
+    configuration: '$(buildConfiguration)'
+    outputDirectory: '$(Build.ArtifactStagingDirectory)'
+
+# ✅ Push to Azure Artifacts feed
+- task: NuGetCommand@2
+  displayName: 'Push NuGet package to Azure Artifacts'
+  inputs:
+    command: 'push'
+    packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
+    publishVstsFeed: 'mrakib4' # ✅ Just the feed name
+    allowPackageConflicts: true
+
+# ✅ Publish artifact (optional)
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Artifact'
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+    ArtifactName: 'drop'
+    publishLocation: 'Container'
