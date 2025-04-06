@@ -1,0 +1,83 @@
+# ASP.NET Core (.NET Framework)
+# Build and test ASP.NET Core projects targeting the full .NET Framework.
+# Add steps that publish symbols, save build artifacts, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/dotnet-core
+
+name: 1.0.0$(Rev:.r)  # Enables auto-incrementing versioning
+
+trigger:
+- main
+
+pool:
+  name: Default  # ✅ Your self-hosted agent pool
+
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+  dotNetVersion: '8.0.x'
+
+steps:
+# ✅ Install NuGet tool
+- task: NuGetToolInstaller@1
+  displayName: 'Install NuGet'
+
+# ✅ Use correct .NET SDK
+- task: UseDotNet@2
+  displayName: 'Use .NET SDK'
+  inputs:
+    version: $(dotNetVersion)
+
+# ✅ Restore NuGet packages
+- task: DotNetCoreCLI@2
+  displayName: 'Restore NuGet packages'
+  inputs:
+    command: 'restore'
+    projects: '$(solution)'
+
+# ✅ Build solution
+- task: DotNetCoreCLI@2
+  displayName: 'Build solution'
+  inputs:
+    command: 'build'
+    projects: '$(solution)'
+    arguments: '--configuration $(buildConfiguration) --no-restore'
+
+# ✅ Run tests
+- task: DotNetCoreCLI@2
+  displayName: 'Run tests'
+  inputs:
+    command: 'test'
+    projects: '**/*Tests/*.csproj'
+    arguments: '--configuration $(buildConfiguration) --no-build --no-restore'
+
+# ✅ Pack NuGet package
+- task: DotNetCoreCLI@2
+  displayName: 'Pack NuGet package'
+  inputs:
+    command: 'pack'
+    packagesToPack: '**/StringLibrary.csproj'
+    versioningScheme: 'off'
+    arguments: '--configuration $(buildConfiguration) /p:PackageVersion=$(Build.BuildNumber)'
+    outputDir: '$(Build.ArtifactStagingDirectory)'
+
+# ✅ Authenticate for Azure Artifacts
+- task: NuGetAuthenticate@0
+  displayName: 'NuGet Authenticate'
+
+# ✅ Push to Azure Artifacts
+- task: NuGetCommand@2
+  displayName: 'Push NuGet package to Azure Artifacts'
+  inputs:
+    command: 'push'
+    packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
+    publishVstsFeed: 'mrakib4' # ⚠️ Use only the feed name
+    allowPackageConflicts: true
+
+# ✅ Optional: publish build artifacts
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Artifact'
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+    ArtifactName: 'drop'
+    publishLocation: 'Container'
