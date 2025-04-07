@@ -3,35 +3,39 @@
 # Add steps that publish symbols, save build artifacts, and more:
 # https://docs.microsoft.com/azure/devops/pipelines/apps/windows/dot-net
 
+name: 1.0.0$(Rev:.r)  # Enables auto-incrementing version numbers like 1.0.01, 1.0.02, etc.
+
 trigger:
 - main
 
 pool:
-  name: Default # This should be your self-hosted agent pool name
+  name: Default  # Your self-hosted agent pool
 
 variables:
-  buildConfiguration: 'Release'
-  buildPlatform: 'Any CPU'
   solution: '**/*.sln'
-  nugetVersion: '1.0.0$(Rev:.r)' # Auto-incrementing version
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
   dotNetVersion: '8.0.x'
 
 steps:
+# ✅ Install latest NuGet CLI
 - task: NuGetToolInstaller@1
   displayName: 'Install NuGet'
 
+# ✅ Use specific .NET SDK version
 - task: UseDotNet@2
-  displayName: 'Use .NET Core SDK'
+  displayName: 'Use .NET SDK'
   inputs:
     version: $(dotNetVersion)
 
+# ✅ Restore NuGet packages from feeds
 - task: DotNetCoreCLI@2
   displayName: 'Restore NuGet packages'
   inputs:
     command: 'restore'
     projects: '$(solution)'
-    feedsToUse: 'select'
 
+# ✅ Build the solution
 - task: DotNetCoreCLI@2
   displayName: 'Build solution'
   inputs:
@@ -39,6 +43,7 @@ steps:
     projects: '$(solution)'
     arguments: '--configuration $(buildConfiguration) --no-restore'
 
+# ✅ Run unit tests
 - task: DotNetCoreCLI@2
   displayName: 'Run tests'
   inputs:
@@ -46,30 +51,34 @@ steps:
     projects: '**/*Tests/*.csproj'
     arguments: '--configuration $(buildConfiguration) --no-build --no-restore'
 
+# ✅ Pack the class library as a NuGet package with unique version
 - task: DotNetCoreCLI@2
   displayName: 'Pack NuGet package'
   inputs:
     command: 'pack'
     packagesToPack: '**/StringLibrary.csproj'
-    versioningScheme: 'byEnvVar'
-    versionEnvVar: 'nugetVersion'
-    configuration: '$(buildConfiguration)'
+    versioningScheme: 'off'
+    arguments: '--configuration $(buildConfiguration) /p:PackageVersion=$(Build.BuildNumber)'
     outputDir: '$(Build.ArtifactStagingDirectory)'
 
+# ✅ Authenticate for Azure Artifacts feed access
 - task: NuGetAuthenticate@0
   displayName: 'NuGet Authenticate'
 
+# ✅ Push the NuGet package to Azure Artifacts
 - task: NuGetCommand@2
   displayName: 'Push NuGet package to Azure Artifacts'
   inputs:
     command: 'push'
     packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
-    publishVstsFeed: 'https://dev.azure.com/mrakib4/StringExtensions-CI/_artifacts/feed/mrakib4'
+    publishVstsFeed: 'mrakib4'  # Replace with your actual feed name if different
     allowPackageConflicts: true
 
+# ✅ Publish the package as a pipeline artifact (optional)
 - task: PublishBuildArtifacts@1
   displayName: 'Publish Artifact'
   inputs:
     PathtoPublish: '$(Build.ArtifactStagingDirectory)'
     ArtifactName: 'drop'
     publishLocation: 'Container'
+
